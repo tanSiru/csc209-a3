@@ -1,6 +1,8 @@
 #ifndef READ_BMP_H_
 #define READ_BMP_H_
 
+#include <stdio.h>
+
 struct pixel {
     unsigned char blue;
     unsigned char green;
