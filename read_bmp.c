@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "read_bmp.h"
 
 #define PIX_START 10
@@ -34,9 +35,9 @@ void read_metadata(FILE *bmp, int *pix_start, int *width, int *height) {
 
     // read in pixel array offset
     fseek_r = fseek(bmp, PIX_START, SEEK_SET);
-    check_fseek(bmp, fseek_r); // error-checking fseek
+    check_fseek(bmp, fseek_r);                       // error-checking fseek
     fread_r = fread(pix_start, sizeof(int), 1, bmp); // store pixel array offset in pix_start
-    check_fread(bmp, fread_r, 1); // error-check fread to make sure 1 argument was read
+    check_fread(bmp, fread_r, 1);                    // error-check fread to make sure 1 argument was read
 
     // read in image width
     fseek_r = fseek(bmp, WIDTH, SEEK_SET);
@@ -59,10 +60,9 @@ struct pixel **read_bmp(FILE *bmp, int pix_start, int width, int height) {
 
     // read in the bmp, one row at a time
     for (int i = 0; i < height; i++) {
-    	pixarray[i] = malloc(width * sizeof(struct pixel)); // allocate space for each row 
-    
+    	pixarray[i] = malloc(width * sizeof(struct pixel));           // allocate space for each row 
         int r = fread(pixarray[i], sizeof(struct pixel), width, bmp); // read in entire row
-        check_fread(bmp, r, width); // error-check to verify width # of pixels were read
+        check_fread(bmp, r, width);                                   // error-checking
 	
     }
     return pixarray;
