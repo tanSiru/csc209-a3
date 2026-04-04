@@ -56,9 +56,12 @@ int main(){
 
     // Read in pixels of bitmap then apply filter
     struct pixel **pixels = read_bmp(image, pixel_array_offset, width, height);
-    struct pixel **gray_pixels = apply_grayscale(pixels, height, width);
 
     if(filter_choice == 1){
+        printf("before gray");
+        struct pixel **gray_pixels = apply_grayscale(pixels, height, width);
+        printf("after gray");
+
         // write to bitmap
         // use a different name than original so that a new bitmap will be created by the system
         FILE *new_image= fopen("grayscale.bmp", "wb");
