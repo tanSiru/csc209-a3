@@ -33,6 +33,108 @@ struct pixel *apply_gray_to_row(struct pixel *row, int width){
         return new_row;
 }
 
+Message *make_message(struct pixel *row, int row_num, int width){
+        // malloc enough space for Message and the size of each row 
+        Message *msg = malloc(sizeof(Message) + width*sizeof(struct pixel));
+        if(msg == NULL){
+                return NULL;
+        }
+
+        msg->row = row_num;
+
+        // copy the pixels individually since the pixels sent through pipe must be the raw bytes rather than the pointer
+        for(int j = 0; j < width; j++){
+                msg->pixel_row[j] = row[j];
+        }
+
+        return msg;
+}
+
+int write_message(int fd, Message *msg, int width){
+        if(write(fd, msg, (sizeof(Message)+width*sizeof(struct pixel))) == -1){
+                return -1;
+        }
+        return 0;
+}
+
+Message *read_message(int fd, int width){
+        // malloc enough space for Message and the size of each row 
+        Message *msg = malloc(sizeof(Message) + width*sizeof(struct pixel));
+        if(msg == NULL){
+                return NULL;
+        }
+
+        // read data sent through pipe
+        if(read(fd, msg, (sizeof(Message)+width*sizeof(struct pixel))) == -1){
+                free(msg);
+                return NULL;
+        }
+
+        return msg;
+}
+
+int child_process_row(int read_fd, int write_fd, int width){
+        Message *received_row = read_message(read_fd, width);
+        if(received_row == NULL){
+                perror("read");
+                return 1;
+        }
+
+        // parse the data
+        int row_num = received_row->row;
+        struct pixel *row = received_row->pixel_row;
+
+        // call function to apply gray to row
+        struct pixel *gray_row = apply_gray_to_row(row, width);
+        if(gray_row == NULL){
+                perror("malloc");
+                free(received_row);
+                return 1;
+        }
+
+
+        // message to be sent back
+        Message *msg = make_message(gray_row, row_num, width);
+        if(msg == NULL){
+                perror("malloc");
+                free(gray_row);
+                free(received_row);
+                return 1;
+        }
+
+        // write the row which has been applied the gray filter into pipe
+        if(write_message(write_fd, msg, width) == -1){
+                perror("write");
+                free(gray_row);
+                free(received_row);
+                free(msg);
+                return 1;
+        }
+
+        // free all the memories for the malloc calls
+        free(gray_row);
+        free(msg);
+        free(received_row);
+
+        return 0;
+}
+
+void copy_message_into_array(struct pixel **modified_pixel_array, Message *received_msg, int width){
+        int num_row = received_msg->row;
+
+        modified_pixel_array[num_row] = malloc(width*sizeof(struct pixel));
+        if(modified_pixel_array[num_row] == NULL){
+                perror("malloc");
+                exit(1);
+        }
+
+        for(int j = 0; j < width; j++){
+                modified_pixel_array[num_row][j] = received_msg->pixel_row[j];
+        }
+}
+
+
+
 struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width){
         
 
@@ -71,21 +173,15 @@ struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width
 
                         child_pids[i] = result; // store the pid of the child responsible for row i, allowing us to wait for the correct child for pipe_fd[i]
 
-                        // malloc enough space for Message and the size of each row 
-                        Message *row_to_send = malloc(sizeof(Message) + width*sizeof(struct pixel));
-                        if(row_to_send==NULL){
+                        // call helper function to make the message that will be sent to pipe
+                        Message *row_to_send = make_message(cur_row, i, width);
+                        if(row_to_send == NULL){
                                 perror("malloc");
                                 exit(1);
                         }
-                        row_to_send->row = i;
-
-                        // copy the pixels individually since the pixels sent through pipe must be the raw bytes rather than the pointer
-                        for(int j = 0; j<width; j++){
-                                row_to_send->pixel_row[j] = cur_row[j];
-                        }
 
                         // write the encoded data into pipe
-                        if(write(pipe_fd[i][0][1], row_to_send,(sizeof(Message)+width*sizeof(struct pixel)))==-1){
+                        if(write_message(pipe_fd[i][0][1], row_to_send, width) == -1){
                                 perror("write");
                                 exit(1);
                         }
@@ -102,55 +198,15 @@ struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width
                         close(pipe_fd[i][1][0]); // close the pipe child->parent for reading
                         close(pipe_fd[i][0][1]); // close the pipe parent->child for writing
 
-                        // malloc enough space for Message and the size of each row 
-                        Message *received_row = malloc(sizeof(Message) + width*sizeof(struct pixel));
-                        if(received_row==NULL){
-                                perror("malloc");
-                                exit(1);
-                        }
+                        
 
-                        // read data sent through pipe
-                        if(read(pipe_fd[i][0][0], received_row, (sizeof(Message)+width*sizeof(struct pixel)))==-1){
-                                perror("read");
-                                exit(1);
-                        }
-
-                        // parse the data
-                        int row_num = received_row->row;
-                        struct pixel *row = received_row->pixel_row;
-
-                        // call function to apply gray to row
-                        struct pixel *gray_row = apply_gray_to_row(row, width);
-
-
-                        // message to be sent back
-                        Message *msg = malloc(sizeof(Message) + width*sizeof(struct pixel));
-                        if(msg==NULL){
-                                perror("malloc");
-                                exit(1);
-                        }
-
-                        // copy the data individually since the data sent through pipe must be the raw bytes rather than the pointer
-                        msg->row = row_num;
-                        for(int j = 0; j<width; j++){
-                                msg->pixel_row[j] = gray_row[j];
-                        }
-
-                        // write the row which has been applied the gray filter into pipe
-                        if(write(pipe_fd[i][1][1], msg, (sizeof(Message)+width*sizeof(struct pixel)))==-1){
-                                perror("write");
-                                exit(1);
-                        }
-
-
-                        // free all the memories for the malloc calls
-                        free(gray_row);
-                        free(msg);
-                        free(received_row);
+                        // call helper function to handle processing the row and sending the processed row to pipe
+                        int child_status = child_process_row(pipe_fd[i][0][0], pipe_fd[i][1][1], width);
+                
                         // close all the pipes as the child has no more work to do
                         close(pipe_fd[i][1][1]); 
                         close(pipe_fd[i][0][0]); 
-                        exit(0);
+                        exit(child_status);
                 }
         }
 
@@ -159,35 +215,112 @@ struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width
 
         //
         for(int i = 0; i < height; i++) {
-                Message *received_msg = malloc(sizeof(Message) + width*sizeof(struct pixel));
-                if(received_msg==NULL){
-                        perror("malloc");
-                        exit(1);
-                }
                 int status;
                 // use the child_pids array from earlier to synchronize the child process with the corresponding pipe
                 pid_t childpid = waitpid(child_pids[i], &status, 0);
                 if(childpid == -1){
                         perror("wait");
                 }
-                if(WIFEXITED(status)){
-                        if(WEXITSTATUS(status)==0){
-                                if(read(pipe_fd[i][1][0], received_msg, (sizeof(Message)+width*sizeof(struct pixel)))==-1){
-                                        perror("read");
+                if(WIFEXITED(status) && WEXITSTATUS(status)==0){
+                        // read in the processed row by calling helper function
+                        Message *received_msg = read_message(pipe_fd[i][1][0], width);
+                        if(received_msg == NULL){
+                                perror("read");
+                                exit(1);
+                        }
+
+                        // write the processed row into modified_pixel_array using helper function
+                        copy_message_into_array(modified_pixel_array, received_msg, width);
+
+                        free(received_msg);
+
+                        close(pipe_fd[i][1][0]);
+                }else{
+                        /*
+                        pipe_fd[0][0] parent -> child
+                        pipe_fd[1][1] child -> parent
+
+
+                        pipe_fd[i][][0] -> read fd
+                        pipe_fd[i][][1] -> write fd
+                        */ 
+
+                        /*
+                        failure due to exit or signalling will both be handled in the same way
+                        handle failure by creating a new child to work on that row
+                        the logic is pretty much the exact same so the code is basically copied over
+                        */
+                        if(pipe(pipe_fd[i][0])==-1){
+                                perror("pipe");
+                                exit(1);
+                        }
+
+                        if(pipe(pipe_fd[i][1])==-1){
+                                perror("pipe");
+                                exit(1);
+                        }
+
+                        pid_t new_child = fork();
+
+                        struct pixel *cur_row = pixel_array[i];
+
+                        if(new_child > 0){
+                                close(pipe_fd[i][1][1]); // close child->parent write
+                                close(pipe_fd[i][0][0]); // close parent->child read
+
+                                child_pids[i] = new_child;
+
+                                Message *row_to_send = make_message(cur_row, i, width);
+                                if(row_to_send == NULL){
+                                        perror("malloc");
                                         exit(1);
                                 }
 
-                                int num_row = received_msg->row;
-
-                                modified_pixel_array[num_row] = malloc(width*sizeof(struct pixel));
-
-                                for(int j = 0; j < width; j++){
-                                        modified_pixel_array[num_row][j] = received_msg->pixel_row[j];
+                                if(write_message(pipe_fd[i][0][1], row_to_send, width) == -1){
+                                        perror("write");
+                                        exit(1);
                                 }
 
+                                free(row_to_send);
+                                close(pipe_fd[i][0][1]);
+
+                                // wait again for replacement child
+                                int new_status;
+                                pid_t childpid2 = waitpid(new_child, &new_status, 0);
+                                if(childpid2 == -1){
+                                        perror("wait");
+                                        exit(1);
+                                }
+
+                                if(WIFEXITED(new_status) && WEXITSTATUS(new_status) == 0){
+                                        Message *received_msg = read_message(pipe_fd[i][1][0], width);
+                                        if(received_msg == NULL){
+                                                perror("read");
+                                                exit(1);
+                                        }
+
+                                        copy_message_into_array(modified_pixel_array, received_msg, width);
+
+                                        free(received_msg);
+                                        close(pipe_fd[i][1][0]);
+                                }else{
+                                        fprintf(stderr, "Row %d failed again\n", i);
+                                        exit(1);
+                                }
+                        }
+
+                        if(new_child < 0){
+                                perror("fork");
+                                exit(1);
+                        } else if(new_child == 0){
                                 close(pipe_fd[i][1][0]);
-                        }else{
-                                // DISCUSS AND HANDLE ERROR 
+                                close(pipe_fd[i][0][1]);
+
+                                int child_status = child_process_row(pipe_fd[i][0][0], pipe_fd[i][1][1], width);
+
+                                close(pipe_fd[i][1][1]);
+                                close(pipe_fd[i][0][0]);
+                                exit(child_status);
                         }
                 }
         }
