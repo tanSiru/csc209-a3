@@ -62,6 +62,10 @@ int main(){
         // write to bitmap
         // use a different name than original so that a new bitmap will be created by the system
         FILE *new_image= fopen("grayscale.bmp", "wb");
+        if (new_image == NULL) {
+            perror("fopen");
+            exit(1);
+        }
 
         // reset file pointer
         rewind(image);
