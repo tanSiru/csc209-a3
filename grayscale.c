@@ -4,6 +4,7 @@
 #include <math.h>
 #include "encoding.h"
 #include <unistd.h>
+#include <sys/wait.h>
 
 // https://github.com/cmartinezal/image-filter/blob/main/helpers.c
 

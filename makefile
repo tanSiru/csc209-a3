@@ -1,6 +1,6 @@
 
 main: main.o read_bmp.o grayscale.o 
-	gcc -Wall -g main.o read_bmp.o grayscale.o -o main
+	gcc -Wall -g main.o read_bmp.o grayscale.o -lm -o main
 
 main.o: main.c read_bmp.h grayscale.h
 	gcc -Wall -g -c main.c
