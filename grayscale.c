@@ -52,13 +52,30 @@ Message *make_message(struct pixel *row, int row_num, int width){
 }
 
 int write_message(int fd, Message *msg, int width){
-        if(write(fd, msg, (sizeof(Message)+width*sizeof(struct pixel))) == -1){
-                return -1;
+        /*
+        write entire messages using write loop to ensure everything is written
+        just using write() may only write small chunks rather than entire message
+        */
+        int total = 0;
+        int size = sizeof(Message) + width*sizeof(struct pixel);
+
+        while(total < size){
+                int bytes_written = write(fd, ((char *)msg) + total, size - total);
+                if(bytes_written <= 0){
+                        return -1;
+                }
+                total += bytes_written;
         }
+
         return 0;
 }
 
 Message *read_message(int fd, int width){
+        /*
+        read entire messages using write loop to ensure everything is written
+        just using write() may only write small chunks rather than entire message
+        */
+
         // malloc enough space for Message and the size of each row 
         Message *msg = malloc(sizeof(Message) + width*sizeof(struct pixel));
         if(msg == NULL){
@@ -66,11 +83,18 @@ Message *read_message(int fd, int width){
         }
 
         // read data sent through pipe
-        if(read(fd, msg, (sizeof(Message)+width*sizeof(struct pixel))) == -1){
-                free(msg);
-                return NULL;
-        }
+        int total = 0;
+        int size = sizeof(Message) + width*sizeof(struct pixel);
 
+        // read data sent through pipe
+        while(total < size){
+                int bytes_read = read(fd, ((char *)msg) + total, size - total);
+                if(bytes_read <= 0){
+                        free(msg);
+                        return NULL;
+                }
+                total += bytes_read;
+        }
         return msg;
 }
 
