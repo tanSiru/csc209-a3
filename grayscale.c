@@ -89,15 +89,21 @@ Message *read_message(int fd, int width){
         // read data sent through pipe
         while(total < size){
                 int bytes_read = read(fd, ((char *)msg) + total, size - total);
-                if(bytes_read == 0){
-                break;  // EOF — stop reading
-                }
+
                 if(bytes_read < 0){
-                free(msg);
-                return NULL;
+                        free(msg);
+                        return NULL;
                 }
+
+                if(bytes_read == 0){
+                        // EOF reached before full message was read → error
+                        free(msg);
+                        return NULL;
+                }
+
                 total += bytes_read;
         }
+
         return msg;
 }
 
