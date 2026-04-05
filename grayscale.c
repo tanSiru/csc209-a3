@@ -193,6 +193,9 @@ struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width
                 struct pixel *cur_row = pixel_array[i];
 
                 if(result>0){
+                        printf("parent created child for row %d\n", i);
+                        fflush(stdout);
+
                         close(pipe_fd[i][1][1]); // close the pipe child->parent for writing
                         close(pipe_fd[i][0][0]); // close the pipe parent->child for reading
 
@@ -220,6 +223,8 @@ struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width
                         printf("Error");
                         exit(1);
                 } else if (result == 0) {
+                        printf("child processing row %d\n", i);
+                        fflush(stdout);
                         close(pipe_fd[i][1][0]); // close the pipe child->parent for reading
                         close(pipe_fd[i][0][1]); // close the pipe parent->child for writing
 
@@ -231,6 +236,7 @@ struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width
                         // close all the pipes as the child has no more work to do
                         close(pipe_fd[i][1][1]); 
                         close(pipe_fd[i][0][0]); 
+                        printf("child done row %d\n", i);
                         exit(child_status);
                 }
         }
@@ -242,12 +248,15 @@ struct pixel **apply_grayscale(struct pixel **pixel_array, int height, int width
         for(int i = 0; i < height; i++) {
                 int status;
                 // use the child_pids array from earlier to synchronize the child process with the corresponding pipe
+                printf("parent waiting for row %d\n", i);
                 pid_t childpid = waitpid(child_pids[i], &status, 0);
+                printf("parent finished waiting for row %d\n", i);
                 if(childpid == -1){
                         perror("wait");
                 }
                 if(WIFEXITED(status) && WEXITSTATUS(status)==0){
                         // read in the processed row by calling helper function
+                        printf("parent reading row %d\n", i);
                         Message *received_msg = read_message(pipe_fd[i][1][0], width);
                         if(received_msg == NULL){
                                 perror("read");
