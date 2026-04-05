@@ -117,7 +117,10 @@ void respond_error(int row_index, int width, struct pixel **pixels, struct pixel
         Message *new_row = malloc(sizeof(Message) + width * sizeof(struct pixel));
 
         // read row data from parent
-        check_read(read(fd[0][0], new_row, sizeof(Message) + width * sizeof(struct pixel)));
+        if (read(fd[0][0], new_row, sizeof(Message) + width * sizeof(struct pixel)) == -1) {
+            fprintf(stderr, "read error: child write on row %d failed again", row_index);
+            exit(1);
+        }
 
         // apply flip
         struct pixel *flipped_row = flip_row(new_row->pixel_row, width);
@@ -128,7 +131,7 @@ void respond_error(int row_index, int width, struct pixel **pixels, struct pixel
 
         // write to parent
         if (write(fd[1][1], new_row, sizeof(Message) + width * sizeof(struct pixel)) == -1) {
-            fprintf(stderr, "child write on row %d failed again", row_index);
+            fprintf(stderr, "write error: child write on row %d failed again", row_index);
             exit(1);
         }
 
