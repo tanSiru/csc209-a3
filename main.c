@@ -58,9 +58,9 @@ int main(){
     struct pixel **pixels = read_bmp(image, pixel_array_offset, width, height);
 
     if(filter_choice == 1){
-        printf("before gray");
+        printf("before gray\n");
         struct pixel **gray_pixels = apply_grayscale(pixels, height, width);
-        printf("after gray");
+        printf("after gray\n");
 
         // write to bitmap
         // use a different name than original so that a new bitmap will be created by the system
@@ -97,6 +97,7 @@ int main(){
         // ADD HORIZONTAL FLIP FILTER CODE
     }
     else if(filter_choice == 3){
+        struct pixel **gray_pixels = apply_grayscale(pixels, height, width);
         FILE *new_image= fopen("grayscale.bmp", "wb");
 
         // reset file pointer
